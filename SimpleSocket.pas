@@ -3,7 +3,7 @@ unit SimpleSocket;
 interface
 
 uses
-    WinSock, Sysutils;
+    Winapi.WinSock, System.Sysutils;
 
 type
     SocketException = class(Exception);
@@ -16,29 +16,29 @@ type
         procedure StrictSend(data: Array of Byte; dataSize: Integer);
         procedure StrictReceive(var buffer: Array of Byte; expectedByteCount: Integer);
         procedure Close;
-        
+
     private
         s: TSocket;
-        
+
     end;
 
 implementation
 
 function HostToIP(host: string): string;
-var 
+var
     wsdata: TWSAData;
-    hostName: array [0..255] of char;
+    hostName: Array [0..255] of AnsiChar;
     hostEnt: PHostEnt;
     addr: PChar;
-  
-begin 
+
+begin
     WSAStartup ($0101, wsdata);
     try
         gethostname(hostName, sizeof (hostName));
         StrPCopy(hostName, host);
         hostEnt := gethostbyname (hostName);
         if (Assigned(hostEnt) and Assigned(hostEnt^.h_addr_list)) then begin
-            addr := hostEnt^.h_addr_list^;
+            addr := PChar(hostEnt^.h_addr_list^);
             if Assigned (addr) then begin
                 Result := Format ('%d.%d.%d.%d', [byte (addr [0]),
                 byte (addr [1]), byte (addr [2]), byte (addr [3])]);
@@ -57,17 +57,17 @@ constructor ClientSocket.Create(address: string; port: Integer);
 var
     addr: TSockAddr;
     host: string;
-    phost: pchar;
-    
+    phost: Array [0..255] of AnsiChar;
+
 begin
     host := HostToIP(address);
 
     if (host = '') then begin
         raise SocketException.Create('Unable to resolve address [' + address + '] to ip.');
     end;
-    
+
     host := host + #0;
-    phost := @host[1];
+    StrPCopy(phost, host);
 
     if (self.s = INVALID_SOCKET) then begin
         raise SocketException.Create('Unable to create socket.');
@@ -94,7 +94,7 @@ function ClientSocket.Send(data: Array of Byte; dataSize: Integer): Integer;
 begin
     result := 0;
     while result < dataSize do begin
-        byteCount := WinSock.Send(self.s, data, dataSize - result, 0);
+        byteCount := Winapi.WinSock.Send(self.s, data, dataSize - result, 0);
         if byteCount < 0 then
             break;
         inc(result, byteCount);
