@@ -42,7 +42,14 @@ var
   cornerTileOffset, angleToWaypoint: Extended;
   speedModule : Extended;
   tile: ShortInt;
+  cars: TCarArray;
+
+  i: Integer;
+
+  isRaceStart: Boolean;
 begin
+  isRaceStart := (world.GetTick() > game.GetInitialFreezeDurationTicks());
+
   nextWaypointX := (me.GetNextWaypointX + 0.5) * game.GetTrackTileSize;
   nextWaypointY := (me.GetNextWaypointY + 0.5) * game.GetTrackTileSize;
 
@@ -72,6 +79,11 @@ begin
        nextWaypointX := nextWaypointX - cornerTileOffset;
        nextWaypointY := nextWaypointY - cornerTileOffset;
      end;
+  else
+    begin
+      if isRaceStart and not move.IsUseNitro then
+        move.SetUseNitro(true);  
+    end;
   end;
 
   angleToWaypoint := me.GetAngleTo(nextWaypointX, nextWaypointY);
@@ -80,10 +92,29 @@ begin
   move.setWheelTurn(angleToWaypoint * 32.0 / PI);
   move.setEnginePower(0.75);
 
-  if (speedModule * speedModule * abs(angleToWaypoint) > 2.5 * 2.5 * PI) then
+  if (speedModule * speedModule * abs(angleToWaypoint) > ( 2.5 * 2.5 * PI) ) then
   begin
     move.SetBrake(true);
   end;
+
+  // Actions
+  if isRaceStart then
+  begin
+    // Attacks
+    cars := world.GetCars();
+    for i := Low(cars) to High(cars) do
+    begin
+      if cars[i].GetPlayerId = me.GetPlayerId then Continue;
+
+      if (abs(me.GetAngleTo(cars[i].GetX, cars[i].GetY)) < (PI / 18)) then
+        if me.GetDistanceTo(cars[i].GetX, cars[i].GetY) < ( 2 *  game.GetTrackTileSize)
+        then move.SetThrowProjectile(true);
+
+      if (abs(me.GetAngleTo(cars[i].GetX, cars[i].GetY)) > ( PI * 7 / 8)) then
+        move.SetSpillOil(true);
+    end;  
+  end;
+
 end;
 
 end.
