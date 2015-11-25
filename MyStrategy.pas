@@ -185,10 +185,10 @@ begin
       strings.Append(mapRow);
     end;
 
-//    strings.SaveToFile('ptwp/' + IntToStr(tick) + '-'
-//                               + IntToStr(wpX)  + '-'
-//                               + IntToStr(wpY)  + '-'
-//                               + '.map');
+    strings.SaveToFile('ptwp/' + IntToStr(tick) + '-'
+                               + IntToStr(wpX)  + '-'
+                               + IntToStr(wpY)  + '-'
+                               + '.map');
 end;
 
 procedure TMyStrategy.Move(me: TCar; world: TWorld; game: TGame; move: TMove);
@@ -202,7 +202,7 @@ var
   i: Integer;
   x, y: Integer;
 
-  isRaceStart, isWPChange: Boolean;
+  isRaceStart, isWPChange, isCornerNext: Boolean;
 
   mapRow: String;
 
@@ -210,6 +210,8 @@ var
 
   strings : TStringList;
 begin
+  isCornerNext := false;
+
   isRaceStart := (world.GetTick() > game.GetInitialFreezeDurationTicks());
 
   if not isRaceStart then NitroFreeze := 0;
@@ -225,9 +227,9 @@ begin
     SetLength(FPathX, FMapW * FMapH);
     SetLength(FPathY, FMapW * FMapH);
 
-    for x := 0 to world.Height - 1 do
+    for x := 0 to world.Width - 1 do
     begin
-      for y := 0 to world.Width - 1 do
+      for y := 0 to world.Height - 1 do
       begin
         tile := world.TilesXY[x][y];
         case tile of
@@ -400,7 +402,7 @@ begin
       strings.Append(mapRow);
     end;
 
-//    strings.SaveToFile('2.map');
+    strings.SaveToFile('2.map');
 
     //FMap[(3 * tx + 1)][(3* ty + 1)] := WALL;
 
@@ -426,7 +428,7 @@ begin
             end;
             strings.Append(mapRow);
           end;
-//          strings.SaveToFile('3.map');
+          strings.SaveToFile('3.map');
           FMap[(3 * tx + 1)][(3* ty + 1)] := BLANK;
         end;
       end;
@@ -453,7 +455,7 @@ begin
   nextWaypointX := (FNextX + 0.5) * game.GetTrackTileSize;
   nextWaypointY := (FNextY + 0.5) * game.GetTrackTileSize;
 
-  cornerTileOffset := 0.25 * game.GetTrackTileSize;
+  cornerTileOffset := 0.35 * game.GetTrackTileSize;
 
 //  tile := world.GetTilesXY[me.GetNextWaypointX, me.GetNextWaypointY];
   tile := world.GetTilesXY[FNextX, FNextY];
@@ -462,21 +464,25 @@ begin
      //CORNERS
   LEFT_TOP_CORNER:
      begin
+       isCornerNext := true;
        nextWaypointX := nextWaypointX + cornerTileOffset;
        nextWaypointY := nextWaypointY + cornerTileOffset;
      end;
   RIGHT_TOP_CORNER:
      begin
+       isCornerNext := true;
        nextWaypointX := nextWaypointX - cornerTileOffset;
        nextWaypointY := nextWaypointY + cornerTileOffset;
      end;
   LEFT_BOTTOM_CORNER:
      begin
+       isCornerNext := true;
        nextWaypointX := nextWaypointX + cornerTileOffset;
        nextWaypointY := nextWaypointY - cornerTileOffset;
      end;
   RIGHT_BOTTOM_CORNER:
      begin
+       isCornerNext := true;
        nextWaypointX := nextWaypointX - cornerTileOffset;
        nextWaypointY := nextWaypointY - cornerTileOffset;
      end;
@@ -485,7 +491,7 @@ begin
       if isRaceStart and (world.GetTick >  NitroFreeze)
       then
       begin
-        move.SetUseNitro(true);
+        //move.SetUseNitro(true);
         NitroFreeze := world.GetTick + 3 * game.GetNitroDurationTicks;
       end;
     end;
@@ -497,7 +503,11 @@ begin
   move.setWheelTurn(angleToWaypoint * 32.0 / PI);
   move.setEnginePower(0.85);
 
-  if (speedModule * speedModule * abs(angleToWaypoint) > ( 2.5 * 2.5 * PI) ) then
+  //if (speedModule * speedModule * abs(angleToWaypoint) > ( 2.5 * 2.5 * PI) ) then
+  if ( me.GetDistanceTo(nextWaypointX, nextWaypointY) < ( 0.6 * game.GetTrackTileSize ) )
+    and isCornerNext
+    and (speedModule > 7)
+  then
   begin
     move.SetBrake(true);
   end;
