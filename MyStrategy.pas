@@ -17,9 +17,15 @@ type
     FPathX: Array of Integer;
     FPathY: Array of Integer;
     FPathLen: Integer;
+    FCurrentWPX: Integer;
+    FCurrentWPY: Integer;
+    FNextX: Integer;
+    FNextY: Integer;
   public
     procedure Move(me: TCar; world: TWorld; game: TGame; move: TMove); override;
     function Lee(ax, ay, bx, by: Integer): Boolean;
+    function MakePathToWP(me: TCar; game: TGame; tick: Integer): Boolean;
+    function NextPoint(me: TCar; game: TGame): Boolean;
     property NitroFreeze: Extended read FNitroFreeze write FNitroFreeze;
   end;
 
@@ -67,6 +73,13 @@ var
   d, x, y, k, ix, iy: Integer;
   stop: boolean;
 begin
+  for k := 0 to FMapW * FMapH - 1 do
+  begin
+    FPathX[k] := 0;
+    FPathY[k] := 0;
+  end;
+
+
   Result := false;
 
   if ((FMap[ax][ay] = WALL) or (FMap[bx][by] = WALL)) then Exit;  // €чейка (ax, ay) или (bx, by) - стена
@@ -130,6 +143,54 @@ begin
   Result := true;
 end;
 
+function TMyStrategy.MakePathToWP(me: TCar; game: TGame; tick: Integer): Boolean;
+var
+  meX, meY, wpX, wpY, x, y, k : Integer;
+  strings: TStringList;
+  mapRow : string;
+  mapChar: Char;
+begin
+  Result := false;
+  meX := Trunc(me.GetX / game.GetTrackTileSize) * 3 + 1;
+  meY := Trunc(me.GetY / game.GetTrackTileSize) * 3 + 1;
+
+  wpX := FCurrentWPX * 3 + 1;
+  wpY := FCurrentWPY * 3 + 1;
+
+  Result := Lee(meX, meY, wpX, wpY);
+
+  // print path
+    strings := TStringList.Create();
+    for y := 0 to FMapH - 1 do
+    begin
+      mapRow := '';
+      for x := 0 to FMapW - 1 do
+      begin
+        case FMap[x][y] of
+          BLANK: mapRow := mapRow + ' ';
+          WALL: mapRow := mapRow + 'X';
+        else
+          mapChar := Char(' ');
+          for k := 0 to FPathLen do
+            if (FPathX[k] = x) and (FPathY[k] = y) then
+            begin
+              mapChar := '*';
+              Break;
+            end;
+          mapRow := mapRow + mapChar;
+          FMap[x][y] := BLANK;
+        end;
+      end;
+
+      strings.Append(mapRow);
+    end;
+
+//    strings.SaveToFile('ptwp/' + IntToStr(tick) + '-'
+//                               + IntToStr(wpX)  + '-'
+//                               + IntToStr(wpY)  + '-'
+//                               + '.map');
+end;
+
 procedure TMyStrategy.Move(me: TCar; world: TWorld; game: TGame; move: TMove);
 var
   nextWaypointX, nextWaypointY: Extended;
@@ -141,7 +202,7 @@ var
   i: Integer;
   x, y: Integer;
 
-  isRaceStart: Boolean;
+  isRaceStart, isWPChange: Boolean;
 
   mapRow: String;
 
@@ -339,7 +400,7 @@ begin
       strings.Append(mapRow);
     end;
 
-    strings.SaveToFile('2.map');
+//    strings.SaveToFile('2.map');
 
     //FMap[(3 * tx + 1)][(3* ty + 1)] := WALL;
 
@@ -365,19 +426,37 @@ begin
             end;
             strings.Append(mapRow);
           end;
-          strings.SaveToFile('3.map');
+//          strings.SaveToFile('3.map');
+          FMap[(3 * tx + 1)][(3* ty + 1)] := BLANK;
         end;
       end;
     end;
 
   end;
 
-  nextWaypointX := (me.GetNextWaypointX + 0.5) * game.GetTrackTileSize;
-  nextWaypointY := (me.GetNextWaypointY + 0.5) * game.GetTrackTileSize;
+  // WP working
+  isWPChange := (FCurrentWPX <> me.GetNextWaypointX) or (FCurrentWPY <> me.GetNextWaypointY);
+
+  if (world.GetTick = 0) or isWPChange then
+  begin
+    FCurrentWPX := me.GetNextWaypointX;
+    FCurrentWPY := me.GetNextWaypointY;
+
+    MakePathToWP(me, game, world.GetTick);
+  end;
+
+//  nextWaypointX := (me.GetNextWaypointX + 0.5) * game.GetTrackTileSize;
+//  nextWaypointY := (me.GetNextWaypointY + 0.5) * game.GetTrackTileSize;
+
+  NextPoint(me, game);
+
+  nextWaypointX := (FNextX + 0.5) * game.GetTrackTileSize;
+  nextWaypointY := (FNextY + 0.5) * game.GetTrackTileSize;
 
   cornerTileOffset := 0.25 * game.GetTrackTileSize;
 
-  tile := world.GetTilesXY[me.GetNextWaypointX, me.GetNextWaypointY];
+//  tile := world.GetTilesXY[me.GetNextWaypointX, me.GetNextWaypointY];
+  tile := world.GetTilesXY[FNextX, FNextY];
 
   case tile of
      //CORNERS
@@ -416,7 +495,7 @@ begin
   speedModule := Math.Hypot(me.GetSpeedX(), me.GetSpeedY());
 
   move.setWheelTurn(angleToWaypoint * 32.0 / PI);
-  move.setEnginePower(0.75);
+  move.setEnginePower(0.85);
 
   if (speedModule * speedModule * abs(angleToWaypoint) > ( 2.5 * 2.5 * PI) ) then
   begin
@@ -432,7 +511,7 @@ begin
     begin
       if cars[i].GetPlayerId = me.GetPlayerId then Continue;
 
-      if (abs(me.GetAngleTo(cars[i].GetX, cars[i].GetY)) < (PI / 18)) then
+      if (abs(me.GetAngleTo(cars[i].GetX, cars[i].GetY)) < (PI / 30)) then
         if me.GetDistanceTo(cars[i].GetX, cars[i].GetY) < ( 2 *  game.GetTrackTileSize)
         then move.SetThrowProjectile(true);
 
@@ -441,6 +520,24 @@ begin
     end;  
   end;
 
+end;
+
+function TMyStrategy.NextPoint(me: TCar; game: TGame): Boolean;
+var
+  meX, meY, wpX, wpY, i, j : Integer;
+begin
+  Result := false;
+  meX := Trunc(me.GetX / game.GetTrackTileSize) * 3 + 1;
+  meY := Trunc(me.GetY / game.GetTrackTileSize) * 3 + 1;
+
+  for i := 0 to FPathLen - 1 do
+    if (FPathX[i] = meX) and (FPathY[i] = meY) then
+    begin
+      FNextX := Trunc(FPathX[i + 3] / 3);
+      FNextY := Trunc(FPathY[i + 3] / 3);
+      Result := true;
+      Break;
+    end;
 end;
 
 end.
