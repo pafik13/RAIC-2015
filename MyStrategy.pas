@@ -28,6 +28,8 @@ type
     procedure Move(me: TCar; world: TWorld; game: TGame; move: TMove); override;
     function Lee(ax, ay, bx, by: Integer): Boolean;
     function MakePathToWP(me: TCar; game: TGame; tick: Integer): Boolean;
+    function IsOnRout(me: TCar; game: TGame): Boolean;
+    function IsLongLine(me: TCar; game: TGame): Boolean;
     function NextPoint(me: TCar; game: TGame): Boolean;
     property NitroFreeze: Extended read FNitroFreeze write FNitroFreeze;
   end;
@@ -68,9 +70,53 @@ const
 // Maневр
   TICKS_BEFORE_MANEUVER = 45;
 
+// ƒлина€ пр€ма€
+  TILES_IN_LONG_LINE = 4;
+
 var
   dx: Array [0..3] of Integer = (1, 0, -1, 0);  // смещени€, соответствующие сосед€м €чейки
   dy: Array [0..3] of Integer = (0, 1, 0, -1);  // справа, снизу, слева и сверху
+
+function TMyStrategy.IsLongLine(me: TCar; game: TGame): Boolean;
+var
+  meX, meY, i, t : Integer;
+begin
+  Result := false;
+  meX := Trunc(me.GetX / game.GetTrackTileSize) * 3 + 1;
+  meY := Trunc(me.GetY / game.GetTrackTileSize) * 3 + 1;
+
+  for i := 0 to FPathLen - 1 do
+    if (FPathX[i] = meX) and (FPathY[i] = meY)
+      and ((i + TILES_IN_LONG_LINE * 3) < (FPathLen - 1))then
+    begin
+      Result := true;
+      for t := 0 to TILES_IN_LONG_LINE * 3 do
+        if FPathX[i] <> FPathX[i + t] then Result := false;
+
+      if Result then Exit else Result := true;
+      
+      for t := 0 to TILES_IN_LONG_LINE * 3 do
+        if FPathY[i] <> FPathY[i + t] then Result := false;
+
+      Exit;
+    end;
+end;
+
+function TMyStrategy.IsOnRout(me: TCar; game: TGame): Boolean;
+var
+  meX, meY, i : Integer;
+begin
+  Result := false;
+  meX := Trunc(me.GetX / game.GetTrackTileSize) * 3 + 1;
+  meY := Trunc(me.GetY / game.GetTrackTileSize) * 3 + 1;
+
+  for i := 0 to FPathLen - 1 do
+    if (FPathX[i] = meX) and (FPathY[i] = meY) then
+    begin
+      Result := true;
+      Exit;
+    end;
+end;
 
 function TMyStrategy.Lee(ax, ay, bx, by: Integer): Boolean;
 var
@@ -191,10 +237,10 @@ begin
       strings.Append(mapRow);
     end;
 
-//    strings.SaveToFile('ptwp/' + IntToStr(tick) + '-'
-//                               + IntToStr(wpX)  + '-'
-//                               + IntToStr(wpY)  + '-'
-//                               + '.map');
+    strings.SaveToFile('ptwp/' + IntToStr(tick) + '-'
+                               + IntToStr(wpX)  + '-'
+                               + IntToStr(wpY)
+                               + '.map');
 end;
 
 procedure TMyStrategy.Move(me: TCar; world: TWorld; game: TGame; move: TMove);
@@ -409,7 +455,7 @@ begin
       strings.Append(mapRow);
     end;
 
-//    strings.SaveToFile('2.map');
+    strings.SaveToFile('2.map');
 
     //FMap[(3 * tx + 1)][(3* ty + 1)] := WALL;
 
@@ -435,7 +481,7 @@ begin
             end;
             strings.Append(mapRow);
           end;
-//          strings.SaveToFile('3.map');
+          strings.SaveToFile('3.map');
           FMap[(3 * tx + 1)][(3* ty + 1)] := BLANK;
         end;
       end;
@@ -495,10 +541,11 @@ begin
      end;
   else
     begin
-      if isRaceStart and (world.GetTick >  NitroFreeze)
+      if isRaceStart and IsLongLine(me, game)
+        and (world.GetTick >  NitroFreeze)
       then
       begin
-        //move.SetUseNitro(true);
+        move.SetUseNitro(true);
         NitroFreeze := world.GetTick + 3 * game.GetNitroDurationTicks;
       end;
     end;
@@ -507,6 +554,14 @@ begin
   angleToWaypoint := me.GetAngleTo(nextWaypointX, nextWaypointY);
   speedModule := Math.Hypot(me.GetSpeedX(), me.GetSpeedY());
 
+//  if abs(angleToWaypoint) > PI / 3 then
+  if not IsOnRout(me, game) then
+  begin
+    FCurrentWPX := me.GetNextWaypointX;
+    FCurrentWPY := me.GetNextWaypointY;
+
+    MakePathToWP(me, game, world.GetTick);
+  end;
 
   if isRaceStart and (speedModule < 0.1) and not FIsManeuver
   then begin
@@ -558,7 +613,7 @@ begin
       if cars[i].GetPlayerId = me.GetPlayerId then Continue;
 
       if (abs(me.GetAngleTo(cars[i].GetX, cars[i].GetY)) < (PI / 30)) then
-        if me.GetDistanceTo(cars[i].GetX, cars[i].GetY) < ( 2 *  game.GetTrackTileSize)
+        if me.GetDistanceTo(cars[i].GetX, cars[i].GetY) < ( 1.6 *  game.GetTrackTileSize)
         then move.SetThrowProjectile(true);
 
       if (abs(me.GetAngleTo(cars[i].GetX, cars[i].GetY)) > ( PI * 7 / 8)) then
@@ -570,7 +625,7 @@ end;
 
 function TMyStrategy.NextPoint(me: TCar; game: TGame): Boolean;
 var
-  meX, meY, wpX, wpY, i, j : Integer;
+  meX, meY, i : Integer;
 begin
   Result := false;
   meX := Trunc(me.GetX / game.GetTrackTileSize) * 3 + 1;
