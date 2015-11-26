@@ -21,6 +21,9 @@ type
     FCurrentWPY: Integer;
     FNextX: Integer;
     FNextY: Integer;
+    FStopTicksCount: Integer;
+    FStopTickLast: Integer;
+    FIsManeuver: Boolean;
   public
     procedure Move(me: TCar; world: TWorld; game: TGame; move: TMove); override;
     function Lee(ax, ay, bx, by: Integer): Boolean;
@@ -61,6 +64,9 @@ const
   UP                  = 2;
   DOWN                = 3;
   _DIRECTION_COUNT_   = 4;
+
+// Maневр
+  TICKS_BEFORE_MANEUVER = 45;
 
 var
   dx: Array [0..3] of Integer = (1, 0, -1, 0);  // смещени€, соответствующие сосед€м €чейки
@@ -185,10 +191,10 @@ begin
       strings.Append(mapRow);
     end;
 
-    strings.SaveToFile('ptwp/' + IntToStr(tick) + '-'
-                               + IntToStr(wpX)  + '-'
-                               + IntToStr(wpY)  + '-'
-                               + '.map');
+//    strings.SaveToFile('ptwp/' + IntToStr(tick) + '-'
+//                               + IntToStr(wpX)  + '-'
+//                               + IntToStr(wpY)  + '-'
+//                               + '.map');
 end;
 
 procedure TMyStrategy.Move(me: TCar; world: TWorld; game: TGame; move: TMove);
@@ -218,6 +224,7 @@ begin
 
   if world.GetTick = 0 then
   begin
+    FIsManeuver := false;
 
     FMapW := world.Width * 3;
     FMapH := world.Height * 3;
@@ -402,7 +409,7 @@ begin
       strings.Append(mapRow);
     end;
 
-    strings.SaveToFile('2.map');
+//    strings.SaveToFile('2.map');
 
     //FMap[(3 * tx + 1)][(3* ty + 1)] := WALL;
 
@@ -428,7 +435,7 @@ begin
             end;
             strings.Append(mapRow);
           end;
-          strings.SaveToFile('3.map');
+//          strings.SaveToFile('3.map');
           FMap[(3 * tx + 1)][(3* ty + 1)] := BLANK;
         end;
       end;
@@ -500,8 +507,37 @@ begin
   angleToWaypoint := me.GetAngleTo(nextWaypointX, nextWaypointY);
   speedModule := Math.Hypot(me.GetSpeedX(), me.GetSpeedY());
 
-  move.setWheelTurn(angleToWaypoint * 32.0 / PI);
-  move.setEnginePower(0.85);
+
+  if isRaceStart and (speedModule < 0.1) and not FIsManeuver
+  then begin
+    if world.GetTick = (FStopTickLast + 1) then
+      begin
+        Inc(FStopTicksCount);
+        FStopTickLast := world.GetTick;
+        if FStopTicksCount = TICKS_BEFORE_MANEUVER then begin
+          FIsManeuver := true;
+          FStopTicksCount := TRUNC(TICKS_BEFORE_MANEUVER * 1.8);
+          MakePathToWP(me, game, world.GetTick);
+        end;
+      end
+    else
+      begin
+        FStopTickLast := world.GetTick;
+        FStopTicksCount := 1;
+      end;
+  end;
+
+  if not FIsManeuver then begin
+    move.setWheelTurn(angleToWaypoint * 32.0 / PI);
+    move.setEnginePower(0.85);
+  end else begin
+    if FStopTicksCount = 0 then FIsManeuver := false
+    else begin
+      Dec(FStopTicksCount);
+      move.setWheelTurn(-1 * angleToWaypoint * 32.0 / PI);
+      move.setEnginePower(-1);
+    end;
+  end;
 
   //if (speedModule * speedModule * abs(angleToWaypoint) > ( 2.5 * 2.5 * PI) ) then
   if ( me.GetDistanceTo(nextWaypointX, nextWaypointY) < ( 0.6 * game.GetTrackTileSize ) )
