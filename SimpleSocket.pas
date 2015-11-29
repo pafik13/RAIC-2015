@@ -3,7 +3,7 @@ unit SimpleSocket;
 interface
 
 uses
-    Winapi.WinSock, System.Sysutils;
+    WinSock, Sysutils;
 
 type
     SocketException = class(Exception);
@@ -94,7 +94,7 @@ function ClientSocket.Send(data: Array of Byte; dataSize: Integer): Integer;
 begin
     result := 0;
     while result < dataSize do begin
-        byteCount := Winapi.WinSock.Send(self.s, data, dataSize - result, 0);
+        byteCount := WinSock.Send(self.s, data, dataSize - result, 0);
         if byteCount < 0 then
             break;
         inc(result, byteCount);
